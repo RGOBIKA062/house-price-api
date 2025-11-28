@@ -82,7 +82,14 @@ demo = gr.Interface(
     title="🏡 House Price Predictor"
 )
 
-# Route for Gradio UI
-@app.get("/")
-def home():
-    return demo.launch(share=False, inline=True)
+# Mount Gradio into the FastAPI app so FastAPI serves Gradio's assets
+# This avoids calling `demo.launch()` inside a request handler which can
+# cause asset requests to return 404 when the Gradio server isn't available.
+try:
+    gr.mount_gradio_app(app, demo, path="/")
+except Exception:
+    # If mounting fails (older gradio versions), keep a simple root route
+    # that informs the user the API is running.
+    @app.get("/")
+    def home():
+        return {"status": "API running. Gradio UI unavailable."}
