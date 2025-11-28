@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import joblib
@@ -6,14 +6,19 @@ import gradio as gr
 from datetime import datetime
 import logging
 
-# Load model
-model = joblib.load("house_model.pkl")
+# Logging (initialize early so load errors get recorded)
+logging.basicConfig(filename="app.log", level=logging.INFO)
+
+# Try to load model but don't crash the app if loading fails (e.g., pickle/python mismatch)
+model = None
+try:
+    model = joblib.load("house_model.pkl")
+    logging.info("Model loaded successfully")
+except Exception as e:
+    logging.exception("Failed to load model: %s", e)
 
 # App initialization
 app = FastAPI(title="House Price Predictor", version="1.1")
-
-# Logging
-logging.basicConfig(filename="app.log", level=logging.INFO)
 
 # CORS (required for frontend)
 app.add_middleware(
@@ -48,6 +53,9 @@ def model_info():
 # Single Prediction
 @app.post("/predict")
 def predict(input: Input):
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded on server")
+
     pred = model.predict([input.data])
     output = float(pred[0])
 
@@ -61,6 +69,9 @@ def predict(input: Input):
 # Batch Prediction
 @app.post("/batch-predict")
 def batch_predict(batch: BatchInput):
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded on server")
+
     preds = model.predict(batch.data)
     return {"predictions": preds.tolist()}
 
@@ -71,6 +82,9 @@ def all_errors(request, exc):
 
 # Gradio Function
 def predict_gradio(*inp):
+    if model is None:
+        return "Model not available"
+
     pred = model.predict([list(inp)])
     return float(pred[0])
 
