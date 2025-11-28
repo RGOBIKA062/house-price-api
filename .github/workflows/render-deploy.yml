@@ -7,40 +7,35 @@ on:
 
 jobs:
   deploy:
-    name: Deploy App to Render
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 1. Create GitHub deployment (this makes the "Deployments" section appear)
+      # 1. Create deployment in GitHub (this makes the Deployments section appear)
       - name: Create GitHub Deployment
         id: deployment
-        uses: peter-evans/create-deployment@v2
+        uses: peter-evans/create-or-update-deployment@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           environment: production
-          transient_environment: false
-          production_environment: true
           auto_merge: false
 
-      # 2. Trigger Render Deploy
+      # 2. Trigger Render deployment
       - name: Trigger Render Deploy
-        id: render
         env:
-         RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-         RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
- 
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
         run: |
           curl -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
           -H "Authorization: Bearer $RENDER_API_KEY" \
           -H "Content-Type: application/json" \
           -d '{}' > render_output.json
 
-      # 3. Mark deployment as successful (shows green check mark)
-      - name: Update Deployment Status (success)
-        uses: peter-evans/create-deployment-status@v2
+      # 3. Mark deployment as success
+      - name: Update Deployment Status
+        uses: peter-evans/create-or-update-deployment-status@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           deployment_id: ${{ steps.deployment.outputs.deployment_id }}
