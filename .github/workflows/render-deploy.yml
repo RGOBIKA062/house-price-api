@@ -2,39 +2,47 @@ name: Deploy to Render
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+
+permissions:
+  deployments: write
+  contents: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
+      # Step 1 — Create Deployment in GitHub
       - name: Create GitHub Deployment
-        id: create_deployment
-        run: |
-          DEPLOY_ID=$(curl -X POST \
-          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github+json" \
-          https://api.github.com/repos/${{ github.repository }}/deployments \
-          -d '{"ref":"main","environment":"production","auto_merge":false}' \
-          | jq -r '.id')
-          
-          echo "DEPLOY_ID=$DEPLOY_ID" >> $GITHUB_ENV
+        id: deployment
+        uses: actions/create-deployment@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment: production
+          transient_environment: false
+          auto_merge: false
 
-      - name: Trigger Render Deploy
+      # Step 2 — Trigger Render Deployment
+      - name: Deploy to Render
+        id: render_deploy
         run: |
           curl -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
           -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
           -H "Content-Type: application/json" \
-          -d '{}'
+          -d '{}' > render.json
+        shell: bash
 
-      - name: Mark Deployment as Success
-        run: |
-          curl -X POST \
-          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github+json" \
-          https://api.github.com/repos/${{ github.repository }}/deployments/$DEPLOY_ID/statuses \
-          -d '{"state":"success"}'
+      # Step 3 — Mark Deployment as Successful
+      - name: Set Deployment Status to Success
+        uses: actions/create-deployment-status@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
+          environment: production
+          environment_url: https://${{ secrets.RENDER_SERVICE_ID }}.onrender.com
+          state: success
