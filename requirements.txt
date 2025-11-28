@@ -4,4 +4,3 @@ gradio
 joblib
 scikit-learn
 pydantic
-python-multipart
