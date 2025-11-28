@@ -5,44 +5,53 @@ on:
     branches:
       - main
 
-permissions:
-  deployments: write
-  contents: read
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # Step 1 — Create Deployment in GitHub
-      - name: Create GitHub Deployment
-        id: deployment
-        uses: actions/create-deployment@v2
+      # 1. Create a GitHub Deployment (this creates the Deployment section)
+      - name: Create deployment
+        id: create_deployment
+        uses: actions/github-script@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          environment: production
-          transient_environment: false
-          auto_merge: false
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              environment: "production",
+              auto_merge: false,
+              required_contexts: []
+            });
+            core.setOutput("deployment_id", deployment.data.id);
 
-      # Step 2 — Trigger Render Deployment
-      - name: Deploy to Render
-        id: render_deploy
+      # 2. Trigger Render Deploy
+      - name: Deploy on Render
+        id: render
+        env:
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
         run: |
-          curl -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
-          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+          curl -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+          -H "Authorization: Bearer $RENDER_API_KEY" \
           -H "Content-Type: application/json" \
-          -d '{}' > render.json
-        shell: bash
+          -d '{}'
 
-      # Step 3 — Mark Deployment as Successful
-      - name: Set Deployment Status to Success
-        uses: actions/create-deployment-status@v2
+      # 3. Mark deployment as SUCCESS on GitHub (gives you green tick)
+      - name: Mark deployment as successful
+        uses: actions/github-script@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
-          environment: production
-          environment_url: https://${{ secrets.RENDER_SERVICE_ID }}.onrender.com
-          state: success
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.create_deployment.outputs.deployment_id }},
+              state: "success",
+              environment_url: "https://${{ secrets.RENDER_SERVICE_ID }}.onrender.com"
+            });
